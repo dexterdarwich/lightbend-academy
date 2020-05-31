@@ -40,9 +40,7 @@ class CachedCustomerRepository implements CustomerRepository {
         if (cache.containsKey(customerId)) {
             future = CompletableFuture.completedFuture(Optional.of(cache.get(customerId)));
         } else {
-            future = CompletableFuture.supplyAsync(() -> {
-                return objectStore.read(customerId).map(obj -> (Customer) obj);
-            });
+            future = CompletableFuture.supplyAsync(() -> objectStore.read(customerId).map(obj -> (Customer) obj));
         }
         lock.readLock().unlock();
 
