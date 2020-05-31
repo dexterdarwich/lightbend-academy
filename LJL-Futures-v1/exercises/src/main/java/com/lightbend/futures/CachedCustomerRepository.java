@@ -2,13 +2,14 @@ package com.lightbend.futures;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 interface CustomerRepository {
-    void saveCustomer(Customer customer);
-    Optional<Customer> getCustomer(UUID customerId);
+    CompletableFuture<Void> saveCustomer(Customer customer);
+    CompletableFuture<Optional<Customer>> getCustomer(UUID customerId);
 }
 
 class CachedCustomerRepository implements CustomerRepository {
@@ -22,29 +23,29 @@ class CachedCustomerRepository implements CustomerRepository {
     }
 
     @Override
-    public void saveCustomer(Customer customer) {
-        lock.writeLock().lock();
+    public CompletableFuture<Void> saveCustomer(Customer customer) {
 
-        objectStore.write(customer.getId(), customer);
-        cache.put(customer.getId(), customer);
-
-        lock.writeLock().unlock();
+        return CompletableFuture.runAsync(() -> {
+            lock.writeLock().lock();
+            objectStore.write(customer.getId(), customer);
+            cache.put(customer.getId(), customer);
+            lock.writeLock().unlock();
+        });
     }
 
     @Override
-    public Optional<Customer> getCustomer(UUID customerId) {
+    public CompletableFuture<Optional<Customer>> getCustomer(UUID customerId) {
         lock.readLock().lock();
-
-        Optional<Customer> result;
-
-        if(cache.containsKey(customerId)) {
-            result = Optional.of(cache.get(customerId));
+        CompletableFuture<Optional<Customer>> future;
+        if (cache.containsKey(customerId)) {
+            future = CompletableFuture.completedFuture(Optional.of(cache.get(customerId)));
         } else {
-            result = objectStore.read(customerId).map(obj -> (Customer) obj);
+            future = CompletableFuture.supplyAsync(() -> {
+                return objectStore.read(customerId).map(obj -> (Customer) obj);
+            });
         }
-
         lock.readLock().unlock();
 
-        return result;
+        return future;
     }
 }

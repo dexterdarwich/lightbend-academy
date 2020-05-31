@@ -19,24 +19,24 @@ class CustomerService {
             lastName,
             address,
             phoneNumber
-        ));
+        )).join();
 
         return customerId;
     }
 
     Optional<String> getCustomerFirstName(UUID customerId) {
-        return customerRepository.getCustomer(customerId).map(Customer::getFirstName);
+        return customerRepository.getCustomer(customerId).join().map(Customer::getFirstName);
     }
 
     Optional<String> getCustomerLastName(UUID customerId) {
-        return customerRepository.getCustomer(customerId).map(Customer::getLastName);
+        return customerRepository.getCustomer(customerId).join().map(Customer::getLastName);
     }
 
     Optional<String> getCustomerAddress(UUID customerId) {
-        return customerRepository.getCustomer(customerId).map(Customer::getAddress);
+        return customerRepository.getCustomer(customerId).join().map(Customer::getAddress);
     }
 
     Optional<String> getCustomerPhoneNumber(UUID customerId) {
-        return customerRepository.getCustomer(customerId).map(Customer::getPhoneNumber);
+        return customerRepository.getCustomer(customerId).join().map(Customer::getPhoneNumber);
     }
 }

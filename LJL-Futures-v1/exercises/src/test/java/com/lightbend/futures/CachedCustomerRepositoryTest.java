@@ -26,7 +26,7 @@ class CachedCustomerRepositoryTest {
 
         when(objectStore.write(customer.getId(), customer)).thenReturn(true);
 
-        repository.saveCustomer(customer);
+        repository.saveCustomer(customer).join();
 
         verify(objectStore).write(customer.getId(), customer);
     }
@@ -37,8 +37,8 @@ class CachedCustomerRepositoryTest {
 
         when(objectStore.write(customer.getId(), customer)).thenReturn(true);
 
-        repository.saveCustomer(customer);
-        Optional<Customer> result = repository.getCustomer(customer.getId());
+        repository.saveCustomer(customer).join();
+        Optional<Customer> result = repository.getCustomer(customer.getId()).join();
 
         verify(objectStore, times(1)).write(customer.getId(), customer);
         verify(objectStore, never()).read(customer.getId());
@@ -53,7 +53,7 @@ class CachedCustomerRepositoryTest {
 
         when(objectStore.read(customer.getId())).thenReturn(Optional.of(customer));
 
-        Optional<Customer> result = repository.getCustomer(customer.getId());
+        Optional<Customer> result = repository.getCustomer(customer.getId()).join();
 
         verify(objectStore).read(customer.getId());
         assertTrue(result.isPresent());
@@ -67,7 +67,7 @@ class CachedCustomerRepositoryTest {
 
         when(objectStore.read(customer.getId())).thenReturn(Optional.empty());
 
-        Optional<Customer> result = repository.getCustomer(customer.getId());
+        Optional<Customer> result = repository.getCustomer(customer.getId()).join();
 
         verify(objectStore).read(customer.getId());
         assertFalse(result.isPresent());
@@ -81,8 +81,8 @@ class CachedCustomerRepositoryTest {
         when(objectStore.read(customer1.getId())).thenReturn(Optional.of(customer1));
         when(objectStore.read(customer2.getId())).thenReturn(Optional.of(customer2));
 
-        Optional<Customer> result1 = repository.getCustomer(customer1.getId());
-        Optional<Customer> result2 = repository.getCustomer(customer2.getId());
+        Optional<Customer> result1 = repository.getCustomer(customer1.getId()).join();
+        Optional<Customer> result2 = repository.getCustomer(customer2.getId()).join();
 
         verify(objectStore, times(1)).read(customer1.getId());
         verify(objectStore, times(1)).read(customer2.getId());
