@@ -64,5 +64,6 @@ class CustomerServiceFunctionalTest {
             path.toFile().deleteOnExit()
         );
         tmpFolder.toFile().deleteOnExit();
+        customerRepository.close();
     }
 }
