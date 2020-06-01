@@ -39,21 +39,21 @@ class CustomerServiceFunctionalTest {
             expectedCustomer.getLastName(),
             expectedCustomer.getAddress(),
             expectedCustomer.getPhoneNumber()
-        );
+        ).join();
 
-        Optional<String> actualFirstName = customerService.getCustomerFirstName(customerId);
+        Optional<String> actualFirstName = customerService.getCustomerFirstName(customerId).join();
         assertTrue(actualFirstName.isPresent());
         assertEquals(expectedCustomer.getFirstName(), actualFirstName.get());
 
-        Optional<String> actualLastName = customerService.getCustomerLastName(customerId);
+        Optional<String> actualLastName = customerService.getCustomerLastName(customerId).join();
         assertTrue(actualLastName.isPresent());
         assertEquals(expectedCustomer.getLastName(), actualLastName.get());
 
-        Optional<String> actualAddress = customerService.getCustomerAddress(customerId);
+        Optional<String> actualAddress = customerService.getCustomerAddress(customerId).join();
         assertTrue(actualAddress.isPresent());
         assertEquals(expectedCustomer.getAddress(), actualAddress.get());
 
-        Optional<String> actualPhoneNumber = customerService.getCustomerPhoneNumber(customerId);
+        Optional<String> actualPhoneNumber = customerService.getCustomerPhoneNumber(customerId).join();
         assertTrue(actualPhoneNumber.isPresent());
         assertEquals(expectedCustomer.getPhoneNumber(), actualPhoneNumber.get());
     }

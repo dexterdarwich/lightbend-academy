@@ -2,6 +2,7 @@ package com.lightbend.futures;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 class CustomerService {
 
@@ -11,32 +12,34 @@ class CustomerService {
         this.customerRepository = customerRepository;
     }
 
-    UUID addCustomer(String firstName, String lastName, String address, String phoneNumber) {
+    CompletableFuture<UUID> addCustomer(String firstName, String lastName, String address, String phoneNumber) {
         UUID customerId = UUID.randomUUID();
-        customerRepository.saveCustomer(new Customer(
+        return customerRepository.saveCustomer(new Customer(
             customerId,
             firstName,
             lastName,
             address,
             phoneNumber
-        )).join();
-
-        return customerId;
+        )).thenApply(ignore -> customerId);
     }
 
-    Optional<String> getCustomerFirstName(UUID customerId) {
-        return customerRepository.getCustomer(customerId).join().map(Customer::getFirstName);
+    CompletableFuture<Optional<String>> getCustomerFirstName(UUID customerId) {
+        return customerRepository.getCustomer(customerId)
+                .thenApply(customer -> customer.map(Customer::getFirstName));
     }
 
-    Optional<String> getCustomerLastName(UUID customerId) {
-        return customerRepository.getCustomer(customerId).join().map(Customer::getLastName);
+    CompletableFuture<Optional<String>> getCustomerLastName(UUID customerId) {
+        return customerRepository.getCustomer(customerId)
+                .thenApply(customer -> customer.map(Customer::getLastName));
     }
 
-    Optional<String> getCustomerAddress(UUID customerId) {
-        return customerRepository.getCustomer(customerId).join().map(Customer::getAddress);
+    CompletableFuture<Optional<String>> getCustomerAddress(UUID customerId) {
+        return customerRepository.getCustomer(customerId)
+                .thenApply(customer -> customer.map(Customer::getAddress));
     }
 
-    Optional<String> getCustomerPhoneNumber(UUID customerId) {
-        return customerRepository.getCustomer(customerId).join().map(Customer::getPhoneNumber);
+    CompletableFuture<Optional<String>> getCustomerPhoneNumber(UUID customerId) {
+        return customerRepository.getCustomer(customerId)
+                .thenApply(customer -> customer.map(Customer::getPhoneNumber));
     }
 }

@@ -36,7 +36,7 @@ class CustomerServiceTest {
                 expectedCustomer.getLastName(),
                 expectedCustomer.getAddress(),
                 expectedCustomer.getPhoneNumber()
-        );
+        ).join();
 
         verify(customerRepo).saveCustomer(captor.capture());
 
@@ -55,7 +55,7 @@ class CustomerServiceTest {
 
         when(customerRepo.getCustomer(customer.getId())).thenReturn(CompletableFuture.completedFuture(Optional.of(customer)));
 
-        Optional<String> result = customerService.getCustomerFirstName(customer.getId());
+        Optional<String> result = customerService.getCustomerFirstName(customer.getId()).join();
 
         assertTrue(result.isPresent());
         assertEquals(customer.getFirstName(), result.get());
@@ -67,7 +67,7 @@ class CustomerServiceTest {
 
         when(customerRepo.getCustomer(customer.getId())).thenReturn(CompletableFuture.completedFuture(Optional.of(customer)));
 
-        Optional<String> result = customerService.getCustomerLastName(customer.getId());
+        Optional<String> result = customerService.getCustomerLastName(customer.getId()).join();
 
         assertTrue(result.isPresent());
         assertEquals(customer.getLastName(), result.get());
@@ -79,7 +79,7 @@ class CustomerServiceTest {
 
         when(customerRepo.getCustomer(customer.getId())).thenReturn(CompletableFuture.completedFuture(Optional.of(customer)));
 
-        Optional<String> result = customerService.getCustomerAddress(customer.getId());
+        Optional<String> result = customerService.getCustomerAddress(customer.getId()).join();
 
         assertTrue(result.isPresent());
         assertEquals(customer.getAddress(), result.get());
@@ -91,7 +91,7 @@ class CustomerServiceTest {
 
         when(customerRepo.getCustomer(customer.getId())).thenReturn(CompletableFuture.completedFuture(Optional.of(customer)));
 
-        Optional<String> result = customerService.getCustomerPhoneNumber(customer.getId());
+        Optional<String> result = customerService.getCustomerPhoneNumber(customer.getId()).join();
 
         assertTrue(result.isPresent());
         assertEquals(customer.getPhoneNumber(), result.get());
