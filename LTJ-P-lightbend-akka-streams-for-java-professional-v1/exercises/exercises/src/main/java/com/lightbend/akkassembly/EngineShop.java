@@ -11,14 +11,13 @@ public class EngineShop {
     private final Source<Shipment, NotUsed> shipments;
 
     public EngineShop(int shipmentSize) {
-        Stream<Shipment> shipmentStream = Stream.generate(() -> {
+        shipments = Source.fromIterator(() -> Stream.generate(() -> {
             List<Engine> engines = new Vector<>();
             for (int i = 0; i < shipmentSize; i++) {
                 engines.add(new Engine());
             }
             return new Shipment(engines);
-        });
-        shipments = Source.cycle(() -> shipmentStream.iterator());
+        }).iterator());
     }
 
     public Source<Shipment, NotUsed> getShipments() {
