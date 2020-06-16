@@ -30,6 +30,7 @@ public class Factory {
         return bodyShop.getCars()
                 .via(paintShop.getPaint())
                 .via(engineShop.getInstallEngine())
+                .async()
                 .via(wheelShop.getInstallWheels())
                 .via(upgradeShop.getInstallUpgrades())
                 .via(qualityAssurance.getInspect())

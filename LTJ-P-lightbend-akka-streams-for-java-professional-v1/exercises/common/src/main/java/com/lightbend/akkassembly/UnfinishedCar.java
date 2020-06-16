@@ -59,7 +59,7 @@ class UnfinishedCar {
 
     UnfinishedCar paint(Color color) {
 
-        busy(Duration.ofMillis(0));
+        busy(Duration.ofMillis(2));
 
         return new UnfinishedCar(
                 Optional.of(color),
@@ -71,7 +71,7 @@ class UnfinishedCar {
 
     UnfinishedCar installEngine(Engine engine) {
 
-        busy(Duration.ofMillis(0));
+        busy(Duration.ofMillis(2));
 
         return new UnfinishedCar(
                 color,
@@ -83,7 +83,7 @@ class UnfinishedCar {
 
     UnfinishedCar installWheels(List<Wheel> wheels) {
 
-        busy(Duration.ofMillis(0));
+        busy(Duration.ofMillis(10));
 
         return new UnfinishedCar(
                 color,
@@ -95,7 +95,7 @@ class UnfinishedCar {
 
     UnfinishedCar installUpgrade(Upgrade upgrade) {
 
-        busy(Duration.ofMillis(0));
+        busy(Duration.ofMillis(2));
 
         return new UnfinishedCar(
                 color,
