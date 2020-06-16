@@ -32,6 +32,7 @@ public class Factory {
                 .via(engineShop.getInstallEngine())
                 .async()
                 .via(wheelShop.getInstallWheels())
+                .async()
                 .via(upgradeShop.getInstallUpgrades())
                 .via(qualityAssurance.getInspect())
                 .take(quantity)
