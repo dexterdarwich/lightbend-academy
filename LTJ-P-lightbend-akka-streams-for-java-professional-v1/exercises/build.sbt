@@ -13,3 +13,7 @@ lazy val exercises = project
   .settings(CommonSettings.commonSettings: _*)
   .dependsOn(common % "test->test;compile->compile")
   .enablePlugins(Cinnamon)
+
+lazy val app = project in file(".") enablePlugins (Cinnamon)
+
+mainClass in (Compile, run) := Some("com.lightbend.akkassembly.Akkassembly")

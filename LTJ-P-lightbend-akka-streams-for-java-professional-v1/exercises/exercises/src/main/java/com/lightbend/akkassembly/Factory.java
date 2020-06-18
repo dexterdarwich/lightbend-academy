@@ -26,17 +26,18 @@ public class Factory {
         this.materializer = materializer;
     }
 
-    CompletionStage<List<Car>> orderCars(int quantity) {
+    public CompletionStage<List<Car>> orderCars(int quantity) {
         return bodyShop.getCars()
-                .via(paintShop.getPaint())
-                .via(engineShop.getInstallEngine())
-                .async()
-                .via(wheelShop.getInstallWheels())
-                .async()
-                .via(upgradeShop.getInstallUpgrades())
-                .via(qualityAssurance.getInspect())
+                .via(paintShop.getPaint()).named("paint-stage")
+                .via(engineShop.getInstallEngine()).named("install-engine-stage")
+                //.async()
+                .via(wheelShop.getInstallWheels()).named("install-wheels-stage")
+                //.async()
+                .via(upgradeShop.getInstallUpgrades()).named("install-upgrades-stage")
+                .via(qualityAssurance.getInspect()).named("inspect-stage")
                 .take(quantity)
-                .toMat(Sink.seq(), Keep.right())
-                .run(materializer);
+                .runWith(Sink.seq(), materializer);
+                //.toMat(Sink.seq(), Keep.right())
+                //.run(materializer);
     }
 }

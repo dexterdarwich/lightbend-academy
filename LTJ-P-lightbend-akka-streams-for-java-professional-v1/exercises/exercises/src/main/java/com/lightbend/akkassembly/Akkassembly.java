@@ -46,7 +46,7 @@ public class Akkassembly {
 
       long startTime = System.currentTimeMillis();
 
-      factory.orderCars(1000).thenAccept(cars -> {
+      factory.orderCars(10000).thenAccept(cars -> {
         long orderTime = System.currentTimeMillis() - startTime;
 
         System.out.println(cars.size() + " cars produced in "+orderTime+"ms");
