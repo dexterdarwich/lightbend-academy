@@ -29,6 +29,7 @@ public class Factory {
     public CompletionStage<List<Car>> orderCars(int quantity) {
         return bodyShop.getCars()
                 .via(paintShop.getPaint()).named("paint-stage")
+                .async()
                 .via(engineShop.getInstallEngine()).named("install-engine-stage")
                 .async()
                 .via(wheelShop.getInstallWheels()).named("install-wheels-stage")

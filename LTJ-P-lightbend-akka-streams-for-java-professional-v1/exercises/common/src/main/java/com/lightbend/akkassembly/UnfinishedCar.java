@@ -6,7 +6,7 @@ import java.util.*;
 import static com.lightbend.akkassembly.Busy.*;
 
 class UnfinishedCar {
-    private static final Random random = new Random(4);
+    private static final Random random = new Random(7);
     private static final int busyTimeScale = 10;
     private static final Duration paintTime = calculateRandomMillis();
     private static final Duration installEngineTime = calculateRandomMillis();
@@ -59,7 +59,7 @@ class UnfinishedCar {
 
     UnfinishedCar paint(Color color) {
 
-        busy(Duration.ofMillis(2));
+        busy(paintTime);
 
         return new UnfinishedCar(
                 Optional.of(color),
@@ -71,7 +71,7 @@ class UnfinishedCar {
 
     UnfinishedCar installEngine(Engine engine) {
 
-        busy(Duration.ofMillis(2));
+        busy(installEngineTime);
 
         return new UnfinishedCar(
                 color,
@@ -83,7 +83,7 @@ class UnfinishedCar {
 
     UnfinishedCar installWheels(List<Wheel> wheels) {
 
-        busy(Duration.ofMillis(10));
+        busy(installWheelsTime);
 
         return new UnfinishedCar(
                 color,
@@ -95,7 +95,7 @@ class UnfinishedCar {
 
     UnfinishedCar installUpgrade(Upgrade upgrade) {
 
-        busy(Duration.ofMillis(2));
+        busy(installUpgradeTime);
 
         return new UnfinishedCar(
                 color,
