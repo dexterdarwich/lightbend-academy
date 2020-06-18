@@ -30,14 +30,12 @@ public class Factory {
         return bodyShop.getCars()
                 .via(paintShop.getPaint()).named("paint-stage")
                 .via(engineShop.getInstallEngine()).named("install-engine-stage")
-                //.async()
+                .async()
                 .via(wheelShop.getInstallWheels()).named("install-wheels-stage")
-                //.async()
+                .async()
                 .via(upgradeShop.getInstallUpgrades()).named("install-upgrades-stage")
                 .via(qualityAssurance.getInspect()).named("inspect-stage")
                 .take(quantity)
                 .runWith(Sink.seq(), materializer);
-                //.toMat(Sink.seq(), Keep.right())
-                //.run(materializer);
     }
 }

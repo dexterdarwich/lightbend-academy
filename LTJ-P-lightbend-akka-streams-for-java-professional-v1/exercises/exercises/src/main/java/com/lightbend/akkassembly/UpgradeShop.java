@@ -2,6 +2,7 @@ package com.lightbend.akkassembly;
 
 import akka.NotUsed;
 import akka.stream.FlowShape;
+import akka.stream.Graph;
 import akka.stream.UniformFanInShape;
 import akka.stream.UniformFanOutShape;
 import akka.stream.javadsl.Balance;
@@ -14,8 +15,13 @@ public class UpgradeShop {
 
     public UpgradeShop() {
         installUpgrades = Flow.fromGraph(GraphDSL.create(builder -> {
-            UniformFanOutShape<UnfinishedCar, UnfinishedCar> balance = builder.add(Balance.create(3));
-            UniformFanInShape<UnfinishedCar, UnfinishedCar> merge = builder.add(Merge.create(3));
+            Graph<UniformFanOutShape<UnfinishedCar, UnfinishedCar>, NotUsed> balanceFanoutShape = Balance.create(3);
+            balanceFanoutShape = balanceFanoutShape.named("upgradeshop-balance");
+            UniformFanOutShape<UnfinishedCar, UnfinishedCar> balance = builder.add(balanceFanoutShape);
+
+            Graph<UniformFanInShape<UnfinishedCar, UnfinishedCar>, NotUsed> mergeFanInShapeNotUsedGraph = Merge.create(3);
+            mergeFanInShapeNotUsedGraph = mergeFanInShapeNotUsedGraph.named("upgradeshop-merge");
+            UniformFanInShape<UnfinishedCar, UnfinishedCar> merge = builder.add(mergeFanInShapeNotUsedGraph);
 
             FlowShape<UnfinishedCar, UnfinishedCar> upgradeToDX = builder.add(
                     Flow.of(UnfinishedCar.class).map(car -> car.installUpgrade(Upgrade.DX)));
