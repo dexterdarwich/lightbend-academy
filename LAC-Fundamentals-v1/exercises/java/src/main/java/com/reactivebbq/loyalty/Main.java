@@ -2,6 +2,8 @@ package com.reactivebbq.loyalty;
 
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
+import akka.cluster.sharding.ClusterSharding;
+import akka.cluster.sharding.ClusterShardingSettings;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.stream.Materializer;
@@ -70,12 +72,12 @@ class Main {
         );
 
         // TODO: Uncomment to enable cluster sharding.
-        // loyaltyActorSupervisor = ClusterSharding.get(system).start(
-        //     "loyalty",
-        //     LoyaltyActor.create(loyaltyRepository),
-        //     ClusterShardingSettings.create(system),
-        //     LoyaltyActorSupervisor.messageExtractor
-        // );
+         loyaltyActorSupervisor = ClusterSharding.get(system).start(
+             "loyalty",
+             LoyaltyActor.create(loyaltyRepository),
+             ClusterShardingSettings.create(system),
+             LoyaltyActorSupervisor.messageExtractor
+         );
     }
 
     private static void initializeHttpServer() {
