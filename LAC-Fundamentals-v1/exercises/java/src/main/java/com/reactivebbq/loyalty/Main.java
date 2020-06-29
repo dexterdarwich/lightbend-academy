@@ -6,6 +6,7 @@ import akka.cluster.sharding.ClusterSharding;
 import akka.cluster.sharding.ClusterShardingSettings;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
+import akka.management.javadsl.AkkaManagement;
 import akka.stream.Materializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,9 +29,14 @@ class Main {
         loadConfigOverrides(args);
 
         initializeActorSystem();
+        initializeAkkaManagement();
         initializeRepositories();
         initializeActors();
         initializeHttpServer();
+    }
+
+    private static void initializeAkkaManagement() {
+        AkkaManagement.get(system).start();
     }
 
     private static void loadConfigOverrides(String[] args) {
@@ -67,11 +73,10 @@ class Main {
     }
 
     private static void initializeActors() {
-        loyaltyActorSupervisor = system.actorOf(
+        /*loyaltyActorSupervisor = system.actorOf(
             LoyaltyActorSupervisor.create(loyaltyRepository)
-        );
+        );*/
 
-        // TODO: Uncomment to enable cluster sharding.
          loyaltyActorSupervisor = ClusterSharding.get(system).start(
              "loyalty",
              LoyaltyActor.create(loyaltyRepository),
