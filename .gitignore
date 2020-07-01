@@ -28,6 +28,7 @@ hs_err_pid*
 
 # Ignore all the target folders
 **/target
-
 **/akka-diagnostics
+**/java/data
+
 
