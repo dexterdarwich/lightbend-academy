@@ -256,7 +256,7 @@
         <akka-http-version>10.1.11</akka-http-version>
         <akka-management-version>1.0.5</akka-management-version>
         <akka-enchancements-version>1.1.12</akka-enchancements-version>
-        <cinnamon-version>2.13.0</cinnamon-version>
+        <cinnamon-version>2.14.2</cinnamon-version>
         <junit-version>5.1.0</junit-version>
         <exec-maven-version>1.6.0</exec-maven-version>
 
