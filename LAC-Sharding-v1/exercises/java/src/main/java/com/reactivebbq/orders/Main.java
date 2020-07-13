@@ -2,8 +2,10 @@ package com.reactivebbq.orders;
 
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
+import akka.actor.Props;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
+import akka.routing.RoundRobinPool;
 import akka.stream.Materializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +57,7 @@ class Main {
     }
 
     private static void initializeActors() {
-        orders = system.deadLetters();
+        orders = system.actorOf(new RoundRobinPool(100).props(OrderActor.props( orderRepository)));
     }
 
     private static void initializeHttpServer() {

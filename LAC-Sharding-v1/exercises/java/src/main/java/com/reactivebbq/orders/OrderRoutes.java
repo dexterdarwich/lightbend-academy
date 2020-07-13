@@ -8,7 +8,10 @@ import akka.http.javadsl.server.ExceptionHandler;
 import akka.http.javadsl.server.Route;
 
 import java.time.Duration;
+import java.util.UUID;
 import java.util.concurrent.CompletionStage;
+
+import static akka.pattern.Patterns.ask;
 
 import static akka.http.javadsl.server.PathMatchers.segment;
 
@@ -21,45 +24,48 @@ class OrderRoutes extends AllDirectives {
     public OrderRoutes(ActorRef orderActors) {
         this.orderActors = orderActors;
         this.handleExceptions = ExceptionHandler.newBuilder()
-            .matchAny(ex ->
-                complete(StatusCodes.INTERNAL_SERVER_ERROR, ex.getMessage())
-            )
-            .build();
+                .match(OrderActor.OrderNotFoundException.class, ex ->
+                        complete(StatusCodes.NOT_FOUND, ex.getMessage())
+                )
+                .matchAny(ex ->
+                        complete(StatusCodes.INTERNAL_SERVER_ERROR, ex.getMessage())
+                )
+                .build();
     }
 
     public Route createRoutes() {
         return handleExceptions(handleExceptions, () ->
-            pathPrefix("order", () ->
-                concat(
-                    pathEndOrSingleSlash(() ->
-                        post(() ->
-                            entity(Jackson.unmarshaller(OrderActor.OpenOrder.class), cmd ->
-                                openOrder(cmd)
-                            )
-                        )
-                    ),
-                    pathPrefix(segment(), (orderId) ->
+                pathPrefix("order", () ->
                         concat(
-                            pathPrefix("items", () ->
                                 pathEndOrSingleSlash(() ->
-                                    post(() ->
-                                        entity(
-                                            Jackson.unmarshaller(OrderActor.AddItemToOrder.class), cmd ->
-                                                addItemToOrder(OrderId.fromString(orderId), cmd)
+                                        post(() ->
+                                                entity(Jackson.unmarshaller(OrderActor.OpenOrder.class), cmd ->
+                                                        openOrder(cmd)
+                                                )
                                         )
-                                    )
-                                )
-                            ),
-                            pathEndOrSingleSlash(() ->
-                                get(() ->
-                                    findOrder(OrderId.fromString(orderId))
-                                )
-                            )
+                                ),
+                                pathPrefix(segment(), (orderId) ->
+                                        concat(
+                                                pathPrefix("items", () ->
+                                                        pathEndOrSingleSlash(() ->
+                                                                post(() ->
+                                                                        entity(
+                                                                                Jackson.unmarshaller(OrderActor.AddItemToOrder.class), cmd ->
+                                                                                        addItemToOrder(OrderId.fromString(orderId), cmd)
+                                                                        )
+                                                                )
+                                                        )
+                                                ),
+                                                pathEndOrSingleSlash(() ->
+                                                        get(() ->
+                                                                findOrder(OrderId.fromString(orderId))
+                                                        )
+                                                )
 
+                                        )
+                                )
                         )
-                    )
                 )
-            )
         );
     }
 
@@ -72,15 +78,28 @@ class OrderRoutes extends AllDirectives {
     }
 
     private Route openOrder(OrderActor.OpenOrder cmd) {
-        return null;
+        OrderId orderId = new OrderId();
+        OrderActor.Envelope envelope = new OrderActor.Envelope(orderId, cmd);
+        CompletionStage<Object> objectCompletionStage = ask(orderActors, envelope, timeout);
+        CompletionStage<OrderActor.OrderOpened> orderOpenedCompletionStage = objectCompletionStage.thenApply(object -> (OrderActor.OrderOpened) object);
+        CompletionStage<Order> orderCompletionStage = orderOpenedCompletionStage.thenApply(orderOpened -> orderOpened.getOrder());
+        return onComplete(orderCompletionStage);
     }
 
     private Route findOrder(OrderId orderId) {
-        return null;
+        OrderActor.GetOrder getOrder = new OrderActor.GetOrder();
+        OrderActor.Envelope envelope = new OrderActor.Envelope(orderId, getOrder);
+        CompletionStage<Object> objectCompletionStage = ask(orderActors, envelope, timeout);
+        CompletionStage<Order> orderCompletionStage = objectCompletionStage.thenApply(object -> (Order) object);
+        return onComplete(orderCompletionStage);
     }
 
     private Route addItemToOrder(OrderId orderId, OrderActor.AddItemToOrder cmd) {
-        return null;
+        OrderActor.Envelope envelope = new OrderActor.Envelope(orderId, cmd);
+        CompletionStage<Object> objectCompletionStage = ask(orderActors, envelope, timeout);
+        CompletionStage<OrderActor.ItemAddedToOrder> itemAddedCompletionStage = objectCompletionStage.thenApply(object -> (OrderActor.ItemAddedToOrder) object);
+        CompletionStage<Order> orderCompletionStage = itemAddedCompletionStage.thenApply(itemAddedToOrder -> itemAddedToOrder.getOrder());
+        return onComplete(orderCompletionStage);
     }
 
 }

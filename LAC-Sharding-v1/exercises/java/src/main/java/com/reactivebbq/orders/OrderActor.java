@@ -1,13 +1,127 @@
 package com.reactivebbq.orders;
 
+import akka.actor.AbstractActor;
+import akka.actor.Props;
+import akka.event.Logging;
+import akka.event.LoggingAdapter;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Vector;
+import java.util.concurrent.CompletableFuture;
 
-public class OrderActor {
-    interface Command extends SerializableMessage {}
-    interface Event extends SerializableMessage {}
+import static akka.pattern.Patterns.pipe;
+
+public class OrderActor extends AbstractActor {
+    private final OrderRepository repository;
+    private final LoggingAdapter log;
+
+    static Props props(OrderRepository repository) {
+        return Props.create(OrderActor.class, repository);
+    }
+
+    public OrderActor(OrderRepository repository) {
+        log = Logging.getLogger(getContext().getSystem(), this);
+        this.repository = repository;
+    }
+
+    @Override
+    public Receive createReceive() {
+        return receiveBuilder()
+                .match(Envelope.class,
+                        envelope -> envelope.getCommand() instanceof OpenOrder,
+                        envelope -> {
+                            OrderId orderId = envelope.getOrderId();
+                            Server server = ((OpenOrder) envelope.getCommand()).getServer();
+                            Table table = ((OpenOrder) envelope.getCommand()).getTable();
+                            log.info("[" + orderId + "] OpenOrder(" + server + ", " + table + ")");
+                            CompletableFuture<Optional<Order>> future = repository.find(orderId);
+                            pipe(future.thenCompose(option ->
+                                            option
+                                                    .map(order -> this.<OrderOpened>duplicateOrder(orderId))
+                                                    .orElseGet(() -> openOrder(orderId, server, table))
+                                    ),
+                                    getContext().getDispatcher()).to(getSender());
+                        })
+                .match(Envelope.class,
+                        envelope -> envelope.getCommand() instanceof AddItemToOrder,
+                        envelope -> {
+                            OrderId orderId = envelope.getOrderId();
+                            OrderItem item = ((AddItemToOrder) envelope.getCommand()).getItem();
+                            log.info("[" + orderId + "] AddItemToOrder(" + item + ")");
+                            CompletableFuture<Optional<Order>> future = repository.find(orderId);
+                            pipe(future.thenCompose(option ->
+                                            option
+                                                    .map(order -> addItem(order, item))
+                                                    .orElseGet(() -> orderNotFound(orderId))
+                                    ),
+                                    getContext().getDispatcher()).to(getSender());
+                        })
+                .match(Envelope.class,
+                        envelope -> envelope.getCommand() instanceof GetOrder,
+                        envelope -> {
+                            OrderId orderId = envelope.getOrderId();
+                            log.info("[" + orderId + "] getOrder()");
+                            CompletableFuture<Optional<Order>> future = repository.find(orderId);
+                            pipe(future.thenCompose(option ->
+                                            option
+                                                    .map(CompletableFuture::completedFuture)
+                                                    .orElseGet(() -> orderNotFound(orderId))
+                                    ),
+                                    getContext().getDispatcher()).to(getSender());
+
+                        })
+                .build();
+    }
+
+    private CompletableFuture<OrderOpened> openOrder(OrderId orderId, Server server, Table table) {
+        Vector<OrderItem> items = new Vector<>();
+        Order order = new Order(orderId, server, table, items);
+        CompletableFuture<Order> update = repository.update(order);
+        CompletableFuture<OrderOpened> orderOpenedCompletableFuture = update.thenApply(OrderOpened::new);
+        return orderOpenedCompletableFuture;
+    }
+
+    private CompletableFuture<ItemAddedToOrder> addItem(Order order, OrderItem orderItem) {
+        Order newOrder = order.withItem(orderItem);
+        CompletableFuture<Order> update = repository.update(newOrder);
+        CompletableFuture<ItemAddedToOrder> itemAddedToOrderCompletableFuture = update.thenApply(ItemAddedToOrder::new);
+        return itemAddedToOrderCompletableFuture;
+    }
+
+    private <T> CompletableFuture<T> duplicateOrder(OrderId orderId) {
+        return CompletableFuture.failedFuture(new DuplicateOrderException(orderId));
+    }
+
+    private <T> CompletableFuture<T> orderNotFound(OrderId orderId) {
+        return CompletableFuture.failedFuture(new OrderNotFoundException(orderId));
+    }
+
+    static class Envelope implements SerializableMessage {
+        private final OrderId orderId;
+        private final OrderActor.Command command;
+
+        public Envelope(OrderId orderId, Command command) {
+            this.orderId = orderId;
+            this.command = command;
+        }
+
+        public OrderId getOrderId() {
+            return orderId;
+        }
+
+        public Command getCommand() {
+            return command;
+        }
+    }
+
+    interface Command extends SerializableMessage {
+    }
+
+    interface Event extends SerializableMessage {
+    }
 
     static class OpenOrder implements Command {
         private final Server server;
@@ -120,13 +234,14 @@ public class OrderActor {
         }
     }
 
-    static class GetOrder implements Command {}
+    static class GetOrder implements Command {
+    }
 
     static class OrderNotFoundException extends IllegalStateException {
         private final OrderId orderId;
 
         public OrderNotFoundException(OrderId orderId) {
-            super("Order Not Found: "+orderId);
+            super("Order Not Found: " + orderId);
             this.orderId = orderId;
         }
 
@@ -148,7 +263,7 @@ public class OrderActor {
         private final OrderId orderId;
 
         public DuplicateOrderException(OrderId orderId) {
-            super("Duplicate Order: "+orderId);
+            super("Duplicate Order: " + orderId);
             this.orderId = orderId;
         }
 
