@@ -2,6 +2,7 @@ package com.reactivebbq.orders;
 
 import akka.actor.AbstractActor;
 import akka.actor.Props;
+import akka.cluster.sharding.ShardRegion;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -17,6 +18,7 @@ import static akka.pattern.Patterns.pipe;
 public class OrderActor extends AbstractActor {
     private final OrderRepository repository;
     private final LoggingAdapter log;
+    private final OrderId orderId;
 
     static Props props(OrderRepository repository) {
         return Props.create(OrderActor.class, repository);
@@ -25,17 +27,15 @@ public class OrderActor extends AbstractActor {
     public OrderActor(OrderRepository repository) {
         log = Logging.getLogger(getContext().getSystem(), this);
         this.repository = repository;
+        orderId = OrderId.fromString(getSelf().path().name());
     }
 
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-                .match(Envelope.class,
-                        envelope -> envelope.getCommand() instanceof OpenOrder,
-                        envelope -> {
-                            OrderId orderId = envelope.getOrderId();
-                            Server server = ((OpenOrder) envelope.getCommand()).getServer();
-                            Table table = ((OpenOrder) envelope.getCommand()).getTable();
+                .match(OpenOrder.class, openOrder -> {
+                            Server server = openOrder.getServer();
+                            Table table = openOrder.getTable();
                             log.info("[" + orderId + "] OpenOrder(" + server + ", " + table + ")");
                             CompletableFuture<Optional<Order>> future = repository.find(orderId);
                             pipe(future.thenCompose(option ->
@@ -45,11 +45,8 @@ public class OrderActor extends AbstractActor {
                                     ),
                                     getContext().getDispatcher()).to(getSender());
                         })
-                .match(Envelope.class,
-                        envelope -> envelope.getCommand() instanceof AddItemToOrder,
-                        envelope -> {
-                            OrderId orderId = envelope.getOrderId();
-                            OrderItem item = ((AddItemToOrder) envelope.getCommand()).getItem();
+                .match(AddItemToOrder.class, addItemToOrder -> {
+                            OrderItem item = addItemToOrder.getItem();
                             log.info("[" + orderId + "] AddItemToOrder(" + item + ")");
                             CompletableFuture<Optional<Order>> future = repository.find(orderId);
                             pipe(future.thenCompose(option ->
@@ -59,10 +56,7 @@ public class OrderActor extends AbstractActor {
                                     ),
                                     getContext().getDispatcher()).to(getSender());
                         })
-                .match(Envelope.class,
-                        envelope -> envelope.getCommand() instanceof GetOrder,
-                        envelope -> {
-                            OrderId orderId = envelope.getOrderId();
+                .match(GetOrder.class, getOrder -> {
                             log.info("[" + orderId + "] getOrder()");
                             CompletableFuture<Optional<Order>> future = repository.find(orderId);
                             pipe(future.thenCompose(option ->
@@ -97,6 +91,34 @@ public class OrderActor extends AbstractActor {
 
     private <T> CompletableFuture<T> orderNotFound(OrderId orderId) {
         return CompletableFuture.failedFuture(new OrderNotFoundException(orderId));
+    }
+
+    static ShardRegion.MessageExtractor messageExtractor(int maxShards) {
+        return new ShardRegion.MessageExtractor(){
+            @Override
+            public String entityId(Object message) {
+                if(message instanceof Envelope) {
+                    return ((Envelope) message).getOrderId().getValue().toString();
+                }
+                return null;
+            }
+
+            @Override
+            public Object entityMessage(Object message) {
+                if(message instanceof Envelope) {
+                    return ((Envelope) message).getCommand();
+                }
+                return null;
+            }
+
+            @Override
+            public String shardId(Object message) {
+                if(message instanceof Envelope) {
+                    return String.valueOf(Math.abs(((Envelope) message).getOrderId().hashCode() % maxShards));
+                }
+                return null;
+            }
+        };
     }
 
     static class Envelope implements SerializableMessage {

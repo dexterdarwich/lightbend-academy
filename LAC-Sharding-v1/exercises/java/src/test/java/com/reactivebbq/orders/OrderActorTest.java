@@ -2,6 +2,7 @@ package com.reactivebbq.orders;
 
 import akka.actor.ActorRef;
 import akka.actor.Status;
+import akka.cluster.sharding.ShardRegion;
 import akka.testkit.javadsl.TestKit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -68,7 +69,7 @@ public class OrderActorTest extends AkkaTest {
         Server server = generateServer();
         Table table = generateTable();
 
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.OpenOrder(server, table)));
+        sender.send(orderActor, new OrderActor.OpenOrder(server, table));
 
         return sender.expectMsgClass(OrderActor.OrderOpened.class).getOrder();
     }
@@ -86,11 +87,52 @@ public class OrderActorTest extends AkkaTest {
     }
 
     @Test
+    public void idExtractor_shouldReturnTheExpectedId() {
+        int maxShards = system.settings().config().getInt("orders.max-shards");
+
+        OrderId orderId = generateOrderId();
+        OrderActor.GetOrder message = new OrderActor.GetOrder();
+        OrderActor.Envelope envelope = new OrderActor.Envelope(orderId, message);
+
+        String stringId = OrderActor.messageExtractor(maxShards).entityId(envelope);
+
+        assertEquals(orderId.getValue().toString(), stringId);
+    }
+
+    @Test
+    public void messageExtractor_shouldReturnTheExpectedMessage() {
+        int maxShards = system.settings().config().getInt("orders.max-shards");
+
+        OrderId orderId = generateOrderId();
+        OrderActor.GetOrder message = new OrderActor.GetOrder();
+        OrderActor.Envelope envelope = new OrderActor.Envelope(orderId, message);
+
+        Object msgObject = OrderActor.messageExtractor(maxShards).entityMessage(envelope);
+
+        assertEquals(message, msgObject);
+    }
+
+    @Test
+    public void shardExtractor_shouldReturnTheExpectedshardId() {
+        int maxShards = system.settings().config().getInt("orders.max-shards");
+
+        OrderId orderId = generateOrderId();
+        OrderActor.GetOrder message = new OrderActor.GetOrder();
+        OrderActor.Envelope envelope = new OrderActor.Envelope(orderId, message);
+
+        String expectedShardId = String.valueOf(Math.abs(orderId.hashCode() % maxShards));
+
+        String shardId = OrderActor.messageExtractor(maxShards).shardId(envelope);
+
+        assertEquals(expectedShardId, shardId);
+    }
+
+    @Test
     public void openOrder_shouldInitializeTheOrder() {
         Server server = generateServer();
         Table table = generateTable();
 
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.OpenOrder(server, table)));
+        sender.send(orderActor, new OrderActor.OpenOrder(server, table));
         Order order = sender.expectMsgClass(OrderActor.OrderOpened.class).getOrder();
 
         assertEquals(Optional.of(order), repo.find(order.getId()).join());
@@ -104,10 +146,10 @@ public class OrderActorTest extends AkkaTest {
         Server server = generateServer();
         Table table = generateTable();
 
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.OpenOrder(server, table)));
+        sender.send(orderActor, new OrderActor.OpenOrder(server, table));
         sender.expectMsgClass(OrderActor.OrderOpened.class);
 
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.OpenOrder(server, table)));
+        sender.send(orderActor, new OrderActor.OpenOrder(server, table));
         Throwable ex = sender.expectMsgClass(Status.Failure.class).cause().getCause();
         assertEquals(new OrderActor.DuplicateOrderException(orderId), ex);
     }
@@ -120,7 +162,7 @@ public class OrderActorTest extends AkkaTest {
         RuntimeException expectedException = new RuntimeException("Repository Failure");
         repo.mockUpdate((ignore) -> CompletableFuture.failedFuture(expectedException));
 
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.OpenOrder(server, table)));
+        sender.send(orderActor, new OrderActor.OpenOrder(server, table));
 
         Throwable ex = sender.expectMsgClass(Status.Failure.class).cause().getCause();
         assertEquals(expectedException, ex);
@@ -130,7 +172,7 @@ public class OrderActorTest extends AkkaTest {
     public void addItemToOrder_shouldReturnAnOrderNotFoundExceptionIfTheOrderHasntBeenOpened() {
         OrderItem item = generateOrderItem();
 
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.AddItemToOrder(item)));
+        sender.send(orderActor, new OrderActor.AddItemToOrder(item));
         Throwable ex = sender.expectMsgClass(Status.Failure.class).cause().getCause();
         assertEquals(new OrderActor.OrderNotFoundException(orderId), ex);
     }
@@ -141,7 +183,7 @@ public class OrderActorTest extends AkkaTest {
 
         OrderItem item = generateOrderItem();
 
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.AddItemToOrder(item)));
+        sender.send(orderActor, new OrderActor.AddItemToOrder(item));
         sender.expectMsg(new OrderActor.ItemAddedToOrder(order.withItem(item)));
     }
 
@@ -154,7 +196,7 @@ public class OrderActorTest extends AkkaTest {
         for(OrderItem item : items) {
             order = order.withItem(item);
 
-            sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.AddItemToOrder(item)));
+            sender.send(orderActor, new OrderActor.AddItemToOrder(item));
             sender.expectMsg(new OrderActor.ItemAddedToOrder(order));
         }
     }
@@ -168,14 +210,14 @@ public class OrderActorTest extends AkkaTest {
         Exception expectedException = new RuntimeException("Repository Failure");
         repo.mockUpdate(ignore -> CompletableFuture.failedFuture(expectedException));
 
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.AddItemToOrder(item)));
+        sender.send(orderActor, new OrderActor.AddItemToOrder(item));
         Throwable ex = sender.expectMsgClass(Status.Failure.class).cause().getCause();
         assertEquals(expectedException, ex);
     }
 
     @Test
     public void getOrder_shouldReturnAnOrderNotFoundExceptionIfTheOrderHasntBeenOpened() {
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.GetOrder()));
+        sender.send(orderActor, new OrderActor.GetOrder());
         Throwable ex = sender.expectMsgClass(Status.Failure.class).cause().getCause();
         assertEquals(new OrderActor.OrderNotFoundException(orderId), ex);
     }
@@ -184,7 +226,7 @@ public class OrderActorTest extends AkkaTest {
     public void getOrder_shouldReturnAnOpenOrder() {
         Order order = openOrder();
 
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.GetOrder()));
+        sender.send(orderActor, new OrderActor.GetOrder());
         sender.expectMsg(order);
     }
 
@@ -193,10 +235,10 @@ public class OrderActorTest extends AkkaTest {
         Order order = openOrder();
         OrderItem item = generateOrderItem();
 
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.AddItemToOrder(item)));
+        sender.send(orderActor, new OrderActor.AddItemToOrder(item));
         sender.expectMsgClass(OrderActor.ItemAddedToOrder.class);
 
-        sender.send(orderActor, new OrderActor.Envelope(orderId, new OrderActor.GetOrder()));
+        sender.send(orderActor, new OrderActor.GetOrder());
         sender.expectMsg(order.withItem(item));
     }
 

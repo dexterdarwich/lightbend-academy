@@ -3,6 +3,9 @@ package com.reactivebbq.orders;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.actor.Props;
+import akka.cluster.sharding.ClusterSharding;
+import akka.cluster.sharding.ClusterShardingSettings;
+import akka.cluster.sharding.ShardRegion;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.routing.RoundRobinPool;
@@ -57,7 +60,12 @@ class Main {
     }
 
     private static void initializeActors() {
-        orders = system.actorOf(new RoundRobinPool(100).props(OrderActor.props( orderRepository)));
+        int maxShards = system.settings().config().getInt("orders.max-shards");
+        ClusterShardingSettings settings = ClusterShardingSettings.create(system);
+        orders = ClusterSharding.get(system).start("orders",
+                OrderActor.props(orderRepository),
+                settings,
+                OrderActor.messageExtractor(maxShards));
     }
 
     private static void initializeHttpServer() {
