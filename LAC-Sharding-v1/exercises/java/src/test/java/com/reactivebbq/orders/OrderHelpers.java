@@ -44,4 +44,7 @@ public class OrderHelpers {
         return new Order(generateOrderId(), generateServer(), generateTable(), items);
     }
 
+    public static Order generateOrder(OrderId orderId, Vector<OrderItem> items) {
+        return new Order(orderId, generateServer(), generateTable(), items);
+    }
 }

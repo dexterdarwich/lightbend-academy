@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.Vector;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 
@@ -128,6 +129,36 @@ public class OrderActorTest extends AkkaTest {
     }
 
     @Test
+    public void theActor_shouldLoadItsStateFromTheRepositoryWhenCreated() {
+        Order order = generateOrder();
+        repo.update(order).join();
+
+        ActorRef actor = parent
+            .childActorOf(
+                OrderActor.props(repo),
+                order.getId().getValue().toString());
+
+        sender.send(actor, new OrderActor.GetOrder());
+        sender.expectMsg(order);
+    }
+
+    @Test
+    public void theActor_shouldTerminateWhenItFailsToLoadFromTheRepo() {
+        Order order = generateOrder();
+
+        MockRepo mockRepo = new MockRepo(system.getDispatcher());
+        mockRepo.mockFind(ignore -> CompletableFuture.failedFuture(new Exception("Repo Failed")));
+
+        ActorRef actor = parent
+                .childActorOf(
+                        OrderActor.props(mockRepo),
+                        order.getId().getValue().toString());
+
+        parent.watch(actor);
+        parent.expectTerminated(actor);
+    }
+
+    @Test
     public void openOrder_shouldInitializeTheOrder() {
         Server server = generateServer();
         Table table = generateTable();
@@ -150,14 +181,16 @@ public class OrderActorTest extends AkkaTest {
         sender.expectMsgClass(OrderActor.OrderOpened.class);
 
         sender.send(orderActor, new OrderActor.OpenOrder(server, table));
-        Throwable ex = sender.expectMsgClass(Status.Failure.class).cause().getCause();
+        Throwable ex = sender.expectMsgClass(Status.Failure.class).cause();
         assertEquals(new OrderActor.DuplicateOrderException(orderId), ex);
     }
 
     @Test
-    public void openOrder_shouldReturnTheRepositoryFailureIfTheRepositoryFails() {
+    public void openOrder_shouldReturnTheRepositoryFailureIfTheRepositoryFailsAndTerminate() {
         Server server = generateServer();
         Table table = generateTable();
+
+        parent.watch(orderActor);
 
         RuntimeException expectedException = new RuntimeException("Repository Failure");
         repo.mockUpdate((ignore) -> CompletableFuture.failedFuture(expectedException));
@@ -166,6 +199,29 @@ public class OrderActorTest extends AkkaTest {
 
         Throwable ex = sender.expectMsgClass(Status.Failure.class).cause().getCause();
         assertEquals(expectedException, ex);
+
+        parent.expectTerminated(orderActor);
+    }
+
+    @Test
+    public void openOrder_shouldNotAllowFurtherInteractionsWhileAnUpdateIsInProgress() {
+        Order order = generateOrder(orderId, new Vector<>());
+
+        repo.mockUpdate(o -> CompletableFuture.supplyAsync(() -> {
+            try {
+                Thread.sleep(50);
+                return o;
+            } catch (InterruptedException ex) {
+                throw new CompletionException(ex);
+            }
+        }));
+
+        sender.send(orderActor, new OrderActor.OpenOrder(order.getServer(), order.getTable()));
+        sender.send(orderActor, new OrderActor.OpenOrder(order.getServer(), order.getTable()));
+
+        sender.expectMsg(new OrderActor.OrderOpened(order));
+        Throwable ex = sender.expectMsgClass(Status.Failure.class).cause();
+        assertEquals(new OrderActor.DuplicateOrderException(orderId), ex);
     }
 
     @Test
@@ -173,7 +229,7 @@ public class OrderActorTest extends AkkaTest {
         OrderItem item = generateOrderItem();
 
         sender.send(orderActor, new OrderActor.AddItemToOrder(item));
-        Throwable ex = sender.expectMsgClass(Status.Failure.class).cause().getCause();
+        Throwable ex = sender.expectMsgClass(Status.Failure.class).cause();
         assertEquals(new OrderActor.OrderNotFoundException(orderId), ex);
     }
 
@@ -202,8 +258,10 @@ public class OrderActorTest extends AkkaTest {
     }
 
     @Test
-    public void addItemToOrder_shouldReturnTheRepositoryFailureIfTheRepositoryFails() {
+    public void addItemToOrder_shouldReturnTheRepositoryFailureIfTheRepositoryFailsAndTerminate() {
         Order order = openOrder();
+
+        parent.watch(orderActor);
 
         OrderItem item = generateOrderItem();
 
@@ -213,12 +271,40 @@ public class OrderActorTest extends AkkaTest {
         sender.send(orderActor, new OrderActor.AddItemToOrder(item));
         Throwable ex = sender.expectMsgClass(Status.Failure.class).cause().getCause();
         assertEquals(expectedException, ex);
+
+        parent.expectTerminated(orderActor);
+    }
+
+    @Test
+    public void addItemToOrder_shouldNotAllowFurtherInteractionsWhileAnUpdateIsInProgress() {
+        Order order = openOrder();
+
+        OrderItem item1 = generateOrderItem();
+        Order updated1 = order.withItem(item1);
+
+        OrderItem item2 = generateOrderItem();
+        Order updated2 = updated1.withItem(item2);
+
+        repo.mockUpdate(o -> CompletableFuture.supplyAsync(() -> {
+            try {
+                Thread.sleep(50);
+                return o;
+            } catch (InterruptedException ex) {
+                throw new CompletionException(ex);
+            }
+        }));
+
+        sender.send(orderActor, new OrderActor.AddItemToOrder(item1));
+        sender.send(orderActor, new OrderActor.AddItemToOrder(item2));
+
+        sender.expectMsg(new OrderActor.ItemAddedToOrder(updated1));
+        sender.expectMsg(new OrderActor.ItemAddedToOrder(updated2));
     }
 
     @Test
     public void getOrder_shouldReturnAnOrderNotFoundExceptionIfTheOrderHasntBeenOpened() {
         sender.send(orderActor, new OrderActor.GetOrder());
-        Throwable ex = sender.expectMsgClass(Status.Failure.class).cause().getCause();
+        Throwable ex = sender.expectMsgClass(Status.Failure.class).cause();
         assertEquals(new OrderActor.OrderNotFoundException(orderId), ex);
     }
 

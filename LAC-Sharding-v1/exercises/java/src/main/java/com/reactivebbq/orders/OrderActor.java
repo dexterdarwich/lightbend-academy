@@ -1,7 +1,9 @@
 package com.reactivebbq.orders;
 
 import akka.actor.AbstractActor;
+import akka.actor.AbstractActorWithStash;
 import akka.actor.Props;
+import akka.actor.Status;
 import akka.cluster.sharding.ShardRegion;
 import akka.event.Logging;
 import akka.event.LoggingAdapter;
@@ -15,10 +17,11 @@ import java.util.concurrent.CompletableFuture;
 
 import static akka.pattern.Patterns.pipe;
 
-public class OrderActor extends AbstractActor {
+public class OrderActor extends AbstractActorWithStash {
     private final OrderRepository repository;
     private final LoggingAdapter log;
     private final OrderId orderId;
+    private Optional<Order> state = Optional.empty();
 
     static Props props(OrderRepository repository) {
         return Props.create(OrderActor.class, repository);
@@ -28,45 +31,103 @@ public class OrderActor extends AbstractActor {
         log = Logging.getLogger(getContext().getSystem(), this);
         this.repository = repository;
         orderId = OrderId.fromString(getSelf().path().name());
+        CompletableFuture<OrderLoaded> orderLoadedCompletableFuture = repository.find(orderId).thenApply(OrderLoaded::new);
+        pipe(orderLoadedCompletableFuture, getContext().getDispatcher()).to(getSelf());
     }
 
     @Override
     public Receive createReceive() {
+        return loading();
+    }
+
+    private Receive loading() {
         return receiveBuilder()
-                .match(OpenOrder.class, openOrder -> {
+                .match(OrderLoaded.class,
+                        orderLoaded -> {
+                            unstashAll();
+                            state = orderLoaded.getOrder();
+                            getContext().become(running());
+                        })
+                .match(Status.Failure.class,
+                        failure -> {
+                            log.error(failure.cause(), "[" + orderId + "] FAILURE: " + failure.cause().getMessage());
+                            throw new RuntimeException(failure.cause());
+                        })
+                .matchAny(ignore -> stash())
+                .build();
+    }
+
+    private Receive running() {
+        return receiveBuilder()
+                .match(OpenOrder.class,
+                        openOrder -> {
                             Server server = openOrder.getServer();
                             Table table = openOrder.getTable();
                             log.info("[" + orderId + "] OpenOrder(" + server + ", " + table + ")");
-                            CompletableFuture<Optional<Order>> future = repository.find(orderId);
-                            pipe(future.thenCompose(option ->
-                                            option
-                                                    .map(order -> this.<OrderOpened>duplicateOrder(orderId))
-                                                    .orElseGet(() -> openOrder(orderId, server, table))
-                                    ),
-                                    getContext().getDispatcher()).to(getSender());
+                            state.ifPresentOrElse(order ->
+                                            pipe(duplicateOrder(orderId),
+                                                    getContext().getDispatcher())
+                                                    .to(getSender()),
+                                    () -> {
+                                        getContext().become(waiting());
+                                        pipe(openOrder(orderId, server, table),
+                                                getContext().getDispatcher())
+                                                .to(getSelf(), getSender());
+                                    }
+                            );
                         })
-                .match(AddItemToOrder.class, addItemToOrder -> {
+                .match(AddItemToOrder.class,
+                        addItemToOrder -> {
                             OrderItem item = addItemToOrder.getItem();
                             log.info("[" + orderId + "] AddItemToOrder(" + item + ")");
-                            CompletableFuture<Optional<Order>> future = repository.find(orderId);
-                            pipe(future.thenCompose(option ->
-                                            option
-                                                    .map(order -> addItem(order, item))
-                                                    .orElseGet(() -> orderNotFound(orderId))
-                                    ),
-                                    getContext().getDispatcher()).to(getSender());
+                            state.ifPresentOrElse(order -> {
+                                        getContext().become(waiting());
+                                        pipe(addItem(state.get(), item),
+                                                getContext().getDispatcher())
+                                                .to(getSelf(), getSender());
+                                    },
+                                    () ->
+                                            pipe(orderNotFound(orderId),
+                                                    getContext().getDispatcher())
+                                                    .to(getSender())
+                            );
                         })
-                .match(GetOrder.class, getOrder -> {
+                .match(GetOrder.class,
+                        getOrder -> {
                             log.info("[" + orderId + "] getOrder()");
-                            CompletableFuture<Optional<Order>> future = repository.find(orderId);
-                            pipe(future.thenCompose(option ->
-                                            option
-                                                    .map(CompletableFuture::completedFuture)
-                                                    .orElseGet(() -> orderNotFound(orderId))
-                                    ),
-                                    getContext().getDispatcher()).to(getSender());
-
+                            state.ifPresentOrElse(order ->
+                                            pipe(CompletableFuture.completedFuture(order),
+                                                    getContext().getDispatcher()).to(getSender()),
+                                    () -> pipe(orderNotFound(orderId),
+                                            getContext().getDispatcher())
+                                            .to(getSender()));
                         })
+                .build();
+    }
+
+    private Receive waiting() {
+        return receiveBuilder()
+                .match(OrderOpened.class,
+                        orderOpened -> {
+                            state = Optional.of(orderOpened.getOrder());
+                            unstashAll();
+                            getSender().tell(orderOpened, getSelf());
+                            getContext().become(running());
+                        })
+                .match(ItemAddedToOrder.class,
+                        itemAddedToOrder -> {
+                            state = Optional.of(itemAddedToOrder.getOrder());
+                            unstashAll();
+                            getSender().tell(itemAddedToOrder, getSelf());
+                            getContext().become(running());
+                        })
+                .match(Status.Failure.class,
+                        failure -> {
+                            log.error(failure.cause(), "[" + orderId + "] FAILURE: " + failure.cause().getMessage());
+                            getSender().tell(failure, getSelf());
+                            throw new RuntimeException(failure.cause());
+                        })
+                .matchAny(ignore -> stash())
                 .build();
     }
 
@@ -94,10 +155,10 @@ public class OrderActor extends AbstractActor {
     }
 
     static ShardRegion.MessageExtractor messageExtractor(int maxShards) {
-        return new ShardRegion.MessageExtractor(){
+        return new ShardRegion.MessageExtractor() {
             @Override
             public String entityId(Object message) {
-                if(message instanceof Envelope) {
+                if (message instanceof Envelope) {
                     return ((Envelope) message).getOrderId().getValue().toString();
                 }
                 return null;
@@ -105,7 +166,7 @@ public class OrderActor extends AbstractActor {
 
             @Override
             public Object entityMessage(Object message) {
-                if(message instanceof Envelope) {
+                if (message instanceof Envelope) {
                     return ((Envelope) message).getCommand();
                 }
                 return null;
@@ -113,7 +174,7 @@ public class OrderActor extends AbstractActor {
 
             @Override
             public String shardId(Object message) {
-                if(message instanceof Envelope) {
+                if (message instanceof Envelope) {
                     return String.valueOf(Math.abs(((Envelope) message).getOrderId().hashCode() % maxShards));
                 }
                 return null;
@@ -257,6 +318,31 @@ public class OrderActor extends AbstractActor {
     }
 
     static class GetOrder implements Command {
+    }
+
+    private static class OrderLoaded {
+        private final Optional<Order> order;
+
+        private OrderLoaded(Optional<Order> order) {
+            this.order = order;
+        }
+
+        public Optional<Order> getOrder() {
+            return order;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            OrderLoaded that = (OrderLoaded) o;
+            return Objects.equals(order, that.order);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(order);
+        }
     }
 
     static class OrderNotFoundException extends IllegalStateException {
