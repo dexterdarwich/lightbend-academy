@@ -1,6 +1,5 @@
 package com.reactivebbq.orders;
 
-import akka.actor.AbstractActor;
 import akka.actor.AbstractActorWithStash;
 import akka.actor.Props;
 import akka.actor.Status;
@@ -176,6 +175,9 @@ public class OrderActor extends AbstractActorWithStash {
             public String shardId(Object message) {
                 if (message instanceof Envelope) {
                     return String.valueOf(Math.abs(((Envelope) message).getOrderId().hashCode() % maxShards));
+                } else if (message instanceof ShardRegion.StartEntity) {
+                    OrderId orderId = OrderId.fromString(((ShardRegion.StartEntity) message).entityId());
+                    return String.valueOf(Math.abs(orderId.hashCode() % maxShards));
                 }
                 return null;
             }

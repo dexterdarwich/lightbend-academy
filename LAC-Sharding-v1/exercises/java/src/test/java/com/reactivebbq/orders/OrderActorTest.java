@@ -18,7 +18,7 @@ import java.util.concurrent.Executor;
 import java.util.function.Function;
 
 import static com.reactivebbq.orders.OrderHelpers.*;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class OrderActorTest extends AkkaTest {
@@ -120,12 +120,15 @@ public class OrderActorTest extends AkkaTest {
         OrderId orderId = generateOrderId();
         OrderActor.GetOrder message = new OrderActor.GetOrder();
         OrderActor.Envelope envelope = new OrderActor.Envelope(orderId, message);
+        ShardRegion.StartEntity startEntity = new ShardRegion.StartEntity(orderId.getValue().toString());
 
-        String expectedShardId = String.valueOf(Math.abs(orderId.hashCode() % maxShards));
+        String expectedShardId = String.valueOf(Math.abs(orderId.hashCode() % 30));
 
         String shardId = OrderActor.messageExtractor(maxShards).shardId(envelope);
+        String startEntityShardId = OrderActor.messageExtractor(maxShards).shardId(startEntity);
 
         assertEquals(expectedShardId, shardId);
+        assertEquals(expectedShardId, startEntityShardId);
     }
 
     @Test
